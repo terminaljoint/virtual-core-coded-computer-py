@@ -1,1 +1,2 @@
-print("vanakkam da thambi")
+x = input("your name please: ")
+print(x)
