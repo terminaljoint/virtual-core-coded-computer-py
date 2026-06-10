@@ -45,11 +45,12 @@ async def boot_system():
     print("\x1b[1;32m[SYSTEM]\x1b[0m Pulling main.py from repository directory...\n")
     
     try:
-        # Get the absolute URL of the current page folder to fix the WorkerGlobalScope error
         import time
         from urllib.parse import urljoin
         
-        base_url = js.window.location.href
+        # FIXED: Using js.location.href instead of js.window.location.href
+        # This works natively inside worker scopes without crashing!
+        base_url = js.location.href
         timestamp = int(time.time())
         target_url = urljoin(base_url, f"main.py?t={timestamp}")
         
@@ -57,7 +58,7 @@ async def boot_system():
         response = await pyfetch(target_url)
         
         if response.status != 200:
-            print(f"\x1b[1;31m[ERROR] Could not load main.py (Status: ${response.status})\x1b[0m")
+            print(f"\x1b[1;31m[ERROR] Could not load main.py (Status: {response.status})\x1b[0m")
             return
             
         # Save it locally in the virtual environment container
