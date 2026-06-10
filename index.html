@@ -3,85 +3,133 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Virtual Computer Interface</title>
+    <title>In-Browser Python Runner</title>
     <script src="https://cdn.jsdelivr.net/pyodide/v0.26.1/full/pyodide.js"></script>
     <style>
-        body { font-family: 'Courier New', monospace; background-color: #1e1e1e; color: #00ff00; padding: 20px; }
-        .container { max-width: 600px; margin: 0 auto; background: #2d2d2d; padding: 20px; border-radius: 8px; border: 1px solid #444; }
-        button { background: #00ff00; color: #000; border: none; padding: 10px 20px; font-weight: bold; cursor: pointer; border-radius: 4px; }
-        button:hover { background: #00cc00; }
-        #output { background: #000; padding: 15px; border-radius: 4px; min-height: 100px; white-space: pre-wrap; margin-top: 15px; border: 1px solid #555; }
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f9;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        textarea {
+            width: 100%;
+            height: 200px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 14px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            margin-top: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        #output {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #1e1e1e;
+            color: #ffffff;
+            font-family: 'Courier New', Courier, monospace;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            min-height: 50px;
+        }
+        .status {
+            font-weight: bold;
+            color: #555;
+        }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>📟 Virtual CPU Live Dashboard</h2>
-    <p>This page pulls your raw <strong>main.py</strong> file from GitHub and runs it inside the browser!</p>
-    <button onclick="runLivePythonCPU()">Boot & Run main.py</button>
+    <h2>In-Browser Python Executor</h2>
+    <p class="status" id="status">Loading Pyodide runtime environment (please wait)...</p>
     
-    <h3>System Output:</h3>
-    <div id="output">System idle. Awaiting boot...</div>
+    <textarea id="code" disabled># Write your Python code here
+def greet(name):
+    return f"Hello, {name}!"
+
+print(greet("World"))
+
+for i in range(5):
+    print(f"Line {i+1}")
+</textarea>
+    
+    <br>
+    <button id="run-btn" onclick="runPython()" disabled>Run Code</button>
+
+    <h3>Output:</h3>
+    <div id="output">Initialize the environment first...</div>
 </div>
 
 <script>
-    async function runLivePythonCPU() {
-        let outputDiv = document.getElementById("output");
-        outputDiv.innerText = "Connecting to Python engine...";
-        
+    let pyodide;
+
+    // Initialize Pyodide
+    async function main() {
         try {
-            // 1. Initialize Pyodide
-            let pyodide = await loadPyodide();
-            outputDiv.innerText = "Fetching your live main.py file...\n";
-
-            // 2. Fetch the text content of your main.py file
-            let response = await fetch('main.py');
-            if (!response.ok) {
-                throw new Error("Could not find or read main.py in this folder.");
-            }
-            let pythonCode = await response.text();
-
-            outputDiv.innerText += "Executing main.py...\n\n";
-
-            // 3. Write main.py to Pyodide's virtual file system
-            pyodide.FS.writeFile("main.py", pythonCode);
-
-            // 4. The absolute bulletproof runner script
-            let runnerScript = `
-import sys
-import io
-
-# Direct standard output to our virtual text stream
-sys.stdout = io.StringIO()
-sys.stderr = io.StringIO()
-
-import traceback
-try:
-    with open("main.py", "r") as f:
-        # We pass empty globals/locals to mimic a fresh command line run
-        exec(f.read(), {"__name__": "__main__"})
-except Exception as e:
-    # If the user's python script has a syntax error, catch it and print it
-    print(traceback.format_exc())
-
-# Force pull everything left in the buffer
-sys.stdout.flush()
-output_data = sys.stdout.getvalue()
-output_data
-`;
-
-            // 5. Run it and capture the string output
-            let stdout = await pyodide.runPythonAsync(runnerScript);
-
-            // 6. Display the exact output of the file
-            if (stdout) {
-                outputDiv.innerText += stdout;
-            } else {
-                outputDiv.innerText += "[Program finished running with no console output]";
-            }
-
+            pyodide = await loadPyodide();
+            document.getElementById("status").innerText = "Pyodide Environment Ready!";
+            document.getElementById("status").style.color = "green";
+            document.getElementById("code").disabled = false;
+            document.getElementById("run-btn").disabled = false;
+            document.getElementById("output").innerText = "Ready to run code.";
         } catch (err) {
-            outputDiv.innerText = "Execution Error: " + err;
+            document.getElementById("status").innerText = "Failed to load Pyodide.";
+            document.getElementById("status").style.color = "red";
+            document.getElementById("output").innerText = err;
+        }
+    }
+    
+    main();
+
+    // Function to run the Python code
+    async function runPython() {
+        if (!pyodide) return;
+
+        const code = document.getElementById("code").value;
+        const outputDiv = document.getElementById("output");
+        outputDiv.innerText = "Running...";
+
+        // Redirect standard output (print statements) to our HTML element
+        pyodide.runPython(`
+            import sys
+            import io
+            sys.stdout = io.StringIO()
+            sys.stderr = io.StringIO()
+        `);
+
+        try {
+            // Execute user code
+            await pyodide.runPythonAsync(code);
+            
+            // Capture stdout/stderr
+            let stdout = pyodide.runPython("sys.stdout.getvalue()");
+            let stderr = pyodide.runPython("sys.stderr.getvalue()");
+
+            if (stderr) {
+                outputDiv.innerText = stdout + "\nError:\n" + stderr;
+            } else {
+                outputDiv.innerText = stdout || "Code executed successfully with no output.";
+            }
+        } catch (err) {
+            outputDiv.innerText = "Execution Error:\n" + err;
         }
     }
 </script>
