@@ -37,6 +37,7 @@
     <script type="py" terminal worker>
 import sys
 import asyncio
+import js
 from pyodide.http import pyfetch
 
 async def boot_system():
@@ -44,13 +45,19 @@ async def boot_system():
     print("\x1b[1;32m[SYSTEM]\x1b[0m Pulling main.py from repository directory...\n")
     
     try:
-        # Fetch main.py directly into the background worker's virtual file system
+        # Get the absolute URL of the current page folder to fix the WorkerGlobalScope error
         import time
+        from urllib.parse import urljoin
+        
+        base_url = js.window.location.href
         timestamp = int(time.time())
-        response = await pyfetch(f"main.py?t={timestamp}")
+        target_url = urljoin(base_url, f"main.py?t={timestamp}")
+        
+        # Fetch using the absolute validated path
+        response = await pyfetch(target_url)
         
         if response.status != 200:
-            print(f"\x1b[1;31m[ERROR] Could not load main.py (Status: {response.status})\x1b[0m")
+            print(f"\x1b[1;31m[ERROR] Could not load main.py (Status: ${response.status})\x1b[0m")
             return
             
         # Save it locally in the virtual environment container
