@@ -9,9 +9,9 @@
     
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.3.0/css/xterm.min.css" />
     <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.3.0/lib/xterm.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.8.0/lib/addon-fit.min.js"></script>
     
     <style>
-        /* Force the terminal window to occupy the absolute entire viewport */
         html, body {
             margin: 0;
             padding: 0;
@@ -23,7 +23,7 @@
         #terminal {
             width: 100%;
             height: 100%;
-            padding: 10px;
+            padding: 15px;
             box-sizing: border-box;
         }
     </style>
@@ -34,12 +34,15 @@
 
 <script>
     let term;
+    let fitAddon;
     let pyodide;
-    let currentInputLine = "";
-    let inputResolve = null;
+    let currentInput = "";
+    
+    // Virtual Computer VM Instance State
+    let vmInitialized = false;
 
-    // 1. Initialize Xterm view across 100% viewport dimensions
-    function initTerminalUI() {
+    // 1. Initialize full-screen terminal window layouts
+    function initTerminal() {
         term = new Terminal({
             cursorBlink: true,
             fontSize: 16,
@@ -49,92 +52,110 @@
                 foreground: '#ffffff',
                 cursor: '#ffffff'
             },
-            convertEol: true // Automatically handle line breaks mapping properly
+            convertEol: true
         });
+        
+        fitAddon = new FitAddon.FitAddon();
+        term.loadAddon(fitAddon);
         term.open(document.getElementById('terminal'));
+        fitAddon.fit();
+        
         term.writeln("\x1b[1;32m[SYSTEM]\x1b[0m Initializing terminal console engine...");
     }
 
-    // 2. Main Logic Execution Flow 
+    // 2. Setup the Shell Orchestration Pipeline
     async function main() {
-        initTerminalUI();
+        initTerminal();
 
         try {
-            // Fetch WebAssembly framework backend
+            // Fetch WebAssembly Pyodide framework packages
             pyodide = await loadPyodide();
             
-            // Bypass GitHub's content delivery caching networks
+            // Bypass asset cache configurations
             const timestamp = new Date().getTime();
             const response = await fetch(`main.py?t=${timestamp}`);
             
             if (!response.ok) {
-                throw new Error(`Failed to read main.py file (Status: ${response.status})`);
+                throw new Error(`Failed to locate main.py (Status: ${response.status})`);
             }
             const pythonCode = await response.text();
 
-            term.writeln("\x1b[1;32m[SYSTEM]\x1b[0m main.py loaded. Running execution runtime...\r\n");
+            term.writeln("\x1b[1;32m[SYSTEM]\x1b[0m main.py loaded into context.");
+            term.writeln("\x1b[1;34m[SYSTEM]\x1b[0m Injecting virtual machine execution loops...\r\n");
 
-            // Direct Python standard output print buffers directly onto xterm frames
+            // Redirect stdout and stderr straight into xterm terminal stream displays
             pyodide.setStdout({
                 write: (buffer) => {
-                    const text = String.fromCharCode.apply(null, buffer);
-                    term.write(text);
+                    term.write(String.fromCharCode.apply(null, buffer));
                 }
             });
-
             pyodide.setStderr({
                 write: (buffer) => {
-                    const text = String.fromCharCode.apply(null, buffer);
-                    term.write(`\x1b[1;31m${text}\x1b[0m`); // Highlight compilation faults in Red
+                    term.write(`\x1b[1;31m${String.fromCharCode.apply(null, buffer)}\x1b[0m`);
                 }
             });
 
-            // Handle typing key-mapping capture streams
-            term.onData(data => {
-                if (inputResolve) {
-                    // Check for Enter keypress
-                    if (data === '\r') {
-                        term.write('\r\n');
-                        const resolve = inputResolve;
-                        inputResolve = null;
-                        resolve(currentInputLine);
-                        currentInputLine = "";
-                    } 
-                    // Check for Backspace keypress
-                    else if (data === '\x7F') {
-                        if (currentInputLine.length > 0) {
-                            currentInputLine = currentInputLine.slice(0, -1);
-                            term.write('\b \b');
-                        }
-                    } 
-                    // Record regular alphanumeric print characters
-                    else if (data.charCodeAt(0) >= 32 && data.charCodeAt(0) < 127) {
-                        currentInputLine += data;
-                        term.write(data);
-                    }
-                }
-            });
-
-            // Map synchronous direct text input requests safely via JavaScript proxies
-            pyodide.setStdin({
-                stdin: () => {
-                    return new Promise((resolve) => {
-                        inputResolve = resolve;
-                    });
-                }
-            });
-
-            // Execute Python payload logic asynchronously
+            // Compile the class structure first so JavaScript can converse directly with the VM loop
             await pyodide.runPythonAsync(pythonCode);
             
-            term.writeln("\r\n\x1b[1;34m[PROCESS COMPLETED]\x1b[0m");
+            // Start the VM engine process down inside the terminal console view
+            term.writeln("=== Virtual Computer Started ===");
+            term.write("Enter a number: ");
+            vmInitialized = true;
+
+            // 3. Listen to keyboard data events sequentially without thread locking
+            term.onData(async (data) => {
+                if (!vmInitialized) return;
+
+                if (data === '\r') { // Enter key pressed
+                    term.write('\r\n');
+                    let inputVal = currentInput.trim();
+                    currentInput = "";
+                    
+                    if (inputVal === "") inputVal = "0"; // fallback default protection
+
+                    // Run the step cycle with our custom interactive line parameter inputs directly!
+                    try {
+                        await pyodide.runPythonAsync(`
+# Simulate input insertion, pass it into CPU Register A, and continue execution sequences
+vm.reg_A = int("${inputVal}")
+vm.pc += 1
+
+# Complete running remaining application code structures
+while vm.running:
+    vm.step()
+
+print("=== Virtual Computer Halted ===")
+print(f"Register A = {vm.reg_A}")
+print(f"Register B = {vm.reg_B}")
+print(f"Program Counter = {vm.pc}")
+                        `);
+                        
+                        term.writeln("\r\n\x1b[1;34m[PROCESS COMPLETED]\x1b[0m");
+                        vmInitialized = false; // Block execution to keep environment pristine
+                    } catch (err) {
+                        term.writeln(`\r\n\x1b[1;31m[RUNTIME ERROR] ${err.message}\x1b[0m`);
+                    }
+
+                } else if (data === '\x7F') { // Backspace key pressed
+                    if (currentInput.length > 0) {
+                        currentInput = currentInput.slice(0, -1);
+                        term.write('\b \b');
+                    }
+                } else if (data.charCodeAt(0) >= 32 && data.charCodeAt(0) < 127) { // Regular inputs
+                    currentInput += data;
+                    term.write(data);
+                }
+            });
 
         } catch (err) {
-            term.writeln(`\r\n\x1b[1;31m[CRITICAL ERROR] ${err.message}\x1b[0m`);
+            term.writeln(`\r\n\x1b[1;31m[LAUNCH FAULT] ${err.message}\x1b[0m`);
         }
     }
 
-    // Initialize execution system engine
+    // Adapt layout dimension scalings reactively
+    window.addEventListener('resize', () => { if(fitAddon) fitAddon.fit(); });
+
     main();
 </script>
 
