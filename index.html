@@ -43,19 +43,25 @@
 
             outputDiv.innerText += "Booting Virtual Machine and running countdown...\n\n";
 
-            // 3. Force Python's print() function to route into our HTML window
-            pyodide.runPython(`
+            // 🔥 FIX: Redirect stdout BEFORE running the main script logic
+            await pyodide.runPythonAsync(`
                 import sys
                 import io
                 sys.stdout = io.StringIO()
             `);
 
-            // 4. Run your exact main.py file content
+            // 3. Run your exact main.py file content
             await pyodide.runPythonAsync(pythonCode);
 
-            // 5. Grab everything your main.py printed out and display it
+            // 4. Grab everything your main.py printed out and display it
             let stdout = pyodide.runPython("sys.stdout.getvalue()");
-            outputDiv.innerText += stdout + "\n--- CPU Halted Gracefully ---";
+            
+            if (stdout.trim() === "") {
+                outputDiv.innerText += "The program executed, but nothing was printed.\n";
+            } else {
+                outputDiv.innerText += stdout + "\n";
+            }
+            outputDiv.innerText += "--- CPU Halted Gracefully ---";
 
         } catch (err) {
             outputDiv.innerText = "Execution Error: " + err;
