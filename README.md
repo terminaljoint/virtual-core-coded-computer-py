@@ -1,4 +1,4 @@
-#***FOLLOW THESE STEPS TO RUN THIS VIRTUAL COMPUTER ON YOUR DEVICE:***
+# ***FOLLOW THESE STEPS TO RUN THIS VIRTUAL COMPUTER ON YOUR DEVICE:***
 
 ## 1. Clone the GitHub repository
 `git clone https://github.com/terminaljoint/virtual-computer-using-py.git`
