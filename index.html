@@ -3,14 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Terminal Console</title>
+    <title>Linux Terminal Console</title>
     
-    <script src="https://cdn.jsdelivr.net/pyodide/v0.26.1/full/pyodide.js"></script>
-    
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.3.0/css/xterm.min.css" />
-    <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.3.0/lib/xterm.min.js"></script>
+    <link rel="stylesheet" href="https://pyscript.net/releases/2024.11.1/core.css">
+    <script type="module" src="https://pyscript.net/releases/2024.11.1/core.js"></script>
     
     <style>
+        /* Force the terminal emulator to take up the absolute entire web page */
         html, body {
             margin: 0;
             padding: 0;
@@ -19,117 +18,55 @@
             background-color: #000000;
             overflow: hidden;
         }
-        #terminal {
-            width: 100%;
-            height: 100%;
-            padding: 15px;
+        
+        /* Style the built-in PyScript terminal tag to occupy 100% space */
+        script[type="py"], py-script, xterm-terminal, .pyscript-terminal {
+            width: 100% !important;
+            height: 100% !important;
             box-sizing: border-box;
+        }
+        
+        /* Fine-tune padding of the interior terminal window */
+        .terminal {
+            padding: 15px !important;
         }
     </style>
 </head>
 <body>
 
-<div id="terminal"></div>
+    <script type="py" terminal worker>
+import sys
+import asyncio
+from pyodide.http import pyfetch
 
-<script>
-    let term;
-    let pyodide;
-    let currentLine = "";
-    let inputResolve = null;
+async def boot_system():
+    print("\x1b[1;32m[SYSTEM]\x1b[0m Booting terminal console engine...")
+    print("\x1b[1;32m[SYSTEM]\x1b[0m Pulling main.py from repository directory...\n")
+    
+    try:
+        # Fetch main.py directly into the background worker's virtual file system
+        import time
+        timestamp = int(time.time())
+        response = await pyfetch(f"main.py?t={timestamp}")
+        
+        if response.status != 200:
+            print(f"\x1b[1;31m[ERROR] Could not load main.py (Status: {response.status})\x1b[0m")
+            return
+            
+        # Save it locally in the virtual environment container
+        with open("main.py", "wb") as f:
+            f.write(await response.bytes())
+            
+        # Dynamically execute the main.py file within this clean terminal session context
+        with open("main.py", "r") as f:
+            exec(f.read(), globals())
+            
+    except Exception as e:
+        print(f"\n\x1b[1;31m[CRITICAL ERROR] Execution failed: {str(e)}\x1b[0m")
 
-    // 1. Fire up the Terminal UI visually first
-    function startTerminalView() {
-        term = new Terminal({
-            cursorBlink: true,
-            fontSize: 16,
-            fontFamily: '"Courier New", Courier, monospace',
-            theme: { background: '#000000', foreground: '#ffffff', cursor: '#ffffff' },
-            convertEol: true
-        });
-        term.open(document.getElementById('terminal'));
-        term.writeln("\x1b[1;32m[SYSTEM]\x1b[0m Booting terminal window layout...");
-    }
-
-    // 2. Main Logic Execution 
-    async function main() {
-        startTerminalView();
-
-        try {
-            // Load Python engine
-            pyodide = await loadPyodide();
-            term.writeln("\x1b[1;32m[SYSTEM]\x1b[0m Core engine successfully configured.");
-
-            // Clear cache and fetch your Python file
-            const cacheBuster = new Date().getTime();
-            const response = await fetch(`main.py?t=${cacheBuster}`);
-            if (!response.ok) throw new Error("Could not load main.py from repository directory.");
-            const pythonCode = await response.text();
-
-            term.writeln("\x1b[1;32m[SYSTEM]\x1b[0m main.py downloaded. Preparing IO interface...\r\n");
-
-            // Direct standard script execution printing loops straight to the console window
-            pyodide.setStdout({
-                write: (buffer) => {
-                    term.write(String.fromCharCode.apply(null, buffer));
-                }
-            });
-            pyodide.setStderr({
-                write: (buffer) => {
-                    term.write(`\x1b[1;31m${String.fromCharCode.apply(null, buffer)}\x1b[0m`);
-                }
-            });
-
-            // Map standard Python input() requests straight to the active console terminal cursor
-            pyodide.setStdin({
-                stdin: () => {
-                    return new Promise((resolve) => {
-                        inputResolve = resolve; // Pass control to keyboard input handler
-                    });
-                }
-            });
-
-            // Intercept data entry directly inside the active terminal environment line
-            term.onData(data => {
-                // If Python is waiting for an input request
-                if (inputResolve) {
-                    if (data === '\r') { // User pressed Enter
-                        term.write('\r\n');
-                        const sendData = currentLine;
-                        currentLine = "";
-                        const resolve = inputResolve;
-                        inputResolve = null;
-                        resolve(sendData); // Release Python's execution wait state
-                    } 
-                    else if (data === '\x7F') { // User pressed Backspace
-                        if (currentLine.length > 0) {
-                            currentLine = currentLine.slice(0, -1);
-                            term.write('\b \b');
-                        }
-                    } 
-                    else if (data.charCodeAt(0) >= 32 && data.charCodeAt(0) < 127) { // Printable characters
-                        currentLine += data;
-                        term.write(data);
-                    }
-                }
-            });
-
-            // Run your script inside a micro-delayed environment block to prevent browser render locks
-            setTimeout(async () => {
-                try {
-                    await pyodide.runPythonAsync(pythonCode);
-                    term.writeln("\r\n\x1b[1;34m[PROCESS COMPLETED]\x1b[0m");
-                } catch (runErr) {
-                    term.writeln(`\r\n\x1b[1;31m[RUNTIME ERROR]\x1b[0m\r\n${runErr.message}`);
-                }
-            }, 50);
-
-        } catch (setupErr) {
-            term.writeln(`\r\n\x1b[1;31m[FATAL ERROR] System initialization failure: ${setupErr.message}\x1b[0m`);
-        }
-    }
-
-    main();
-</script>
+# Execute the async boot loop
+asyncio.ensure_future(boot_system())
+    </script>
 
 </body>
 </html>
