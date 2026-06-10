@@ -5,8 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Linux Terminal Console</title>
     
-    <script src="https://cdn.jsdelivr.net/pyodide/v0.26.1/full/pyodide.js"></script>
-    
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.3.0/css/xterm.min.css" />
     <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.3.0/lib/xterm.min.js"></script>
     
@@ -31,106 +29,107 @@
 
 <div id="terminal"></div>
 
-<script>
-    let term;
-    let pyodide;
-    let currentLineData = "";
-    let inputPromiseResolver = null;
+<script type="module">
+    // We import MicroPython's ultra-lightweight web assembly library
+    import { loadMicroPython } from 'https://cdn.jsdelivr.net/npm/micropython-webworker@1.1.0/index.js';
 
-    // 1. Instantly draw the Terminal window on screen so it is never blank
+    let term;
+    let mp;
+    let inputLineBuffer = "";
+    let resolveInputSignal = null;
+
+    // 1. Instantly print terminal layout so your screen is NEVER blank
     function createTerminalShell() {
         term = new Terminal({
             cursorBlink: true,
-            fontSize: 16,
+            fontSize: 15,
             fontFamily: '"Courier New", Courier, monospace',
             theme: { background: '#000000', foreground: '#ffffff', cursor: '#ffffff' },
             convertEol: true
         });
         term.open(document.getElementById('terminal'));
-        term.writeln("\x1b[1;32m[SYSTEM]\x1b[0m Booting terminal console engine...");
+        term.writeln("\x1b[1;32m[SYSTEM]\x1b[0m Booting ultra-lightweight terminal shell...");
     }
 
-    // 2. Main execution architecture loop
+    // 2. Main Logic Execution Engine
     async function bootSystem() {
         createTerminalShell();
 
         try {
-            // Load the core Pyodide environment safely
-            pyodide = await loadPyodide();
-            term.writeln("\x1b[1;32m[SYSTEM]\x1b[0m Core engine successfully configured.");
-
-            // Calculate the absolute path safely right here on the main JavaScript thread
+            // Find absolute path of repository folder seamlessly
             const currentHref = window.location.href;
             const baseDirectory = currentHref.substring(0, currentHref.lastIndexOf('/'));
             const cacheBuster = new Date().getTime();
             const absoluteTargetUrl = `${baseDirectory}/main.py?t=${cacheBuster}`;
 
-            term.writeln("\x1b[1;32m[SYSTEM]\x1b[0m Pulling main.py from repository directory...");
-
-            // Fetch the code
+            term.writeln("\x1b[1;32m[SYSTEM]\x1b[0m Fetching main.py logic paths...");
             const response = await fetch(absoluteTargetUrl);
-            if (!response.ok) throw new Error(`Could not access main.py (Status: ${response.status})`);
-            const pythonCode = await response.text();
+            if (!response.ok) throw new Error("Could not download main.py file.");
+            let pythonCode = await response.text();
 
-            term.writeln("\x1b[1;32m[SYSTEM]\x1b[0m main.py downloaded. Running runtime environment...\r\n");
+            term.writeln("\x1b[1;32m[SYSTEM]\x1b[0m Initializing MicroPython backend runtime environment...");
+            
+            // Initialize the lightweight interpreter instance
+            mp = await loadMicroPython();
+            term.writeln("\x1b[1;32m[SYSTEM]\x1b[0m Core engine online. Initializing software cycles...\r\n");
 
-            // Capture standard print outputs directly to Xterm lines
-            pyodide.setStdout({
-                write: (buffer) => {
-                    term.write(String.fromCharCode.apply(null, buffer));
-                }
-            });
-            pyodide.setStderr({
-                write: (buffer) => {
-                    term.write(`\x1b[1;31m${String.fromCharCode.apply(null, buffer)}\x1b[0m`);
-                }
+            // Direct standard stdout print chains straight to our UI rows
+            mp.onStdout((text) => {
+                term.write(text);
             });
 
-            // Map Python's native input() calls directly to our keyboard tracking systems
-            pyodide.setStdin({
-                stdin: () => {
-                    return new Promise((resolve) => {
-                        inputPromiseResolver = resolve; // Pause python until user presses Enter
-                    });
-                }
-            });
-
-            // Handle typing key inputs inside the active line context
+            // Catch keyboard keystroke maps directly
             term.onData(data => {
-                if (inputPromiseResolver) {
-                    if (data === '\r') { // Enter key pressed
+                if (resolveInputSignal) {
+                    if (data === '\r') { // Enter key
                         term.write('\r\n');
-                        const submittedData = currentLineData;
-                        currentLineData = "";
-                        const resolve = inputPromiseResolver;
-                        inputPromiseResolver = null;
-                        resolve(submittedData); // Hand line data over to Python's input() check
+                        const finalData = inputLineBuffer;
+                        inputLineBuffer = "";
+                        const resolve = resolveInputSignal;
+                        resolveInputSignal = null;
+                        resolve(finalData); // Release execution suspension hooks
                     } 
-                    else if (data === '\x7F') { // Backspace key pressed
-                        if (currentLineData.length > 0) {
-                            currentLineData = currentLineData.slice(0, -1);
+                    else if (data === '\x7F') { // Backspace key
+                        if (inputLineBuffer.length > 0) {
+                            inputLineBuffer = inputLineBuffer.slice(0, -1);
                             term.write('\b \b');
                         }
                     } 
-                    else if (data.charCodeAt(0) >= 32 && data.charCodeAt(0) < 127) { // Standard characters
-                        currentLineData += data;
+                    else if (data.charCodeAt(0) >= 32 && data.charCodeAt(0) < 127) {
+                        inputLineBuffer += data;
                         term.write(data);
                     }
                 }
             });
 
-            // Execute the code asynchronously using a non-blocking timeout strategy
-            setTimeout(async () => {
-                try {
-                    await pyodide.runPythonAsync(pythonCode);
-                    term.writeln("\r\n\x1b[1;34m[PROCESS COMPLETED]\x1b[0m");
-                } catch (runErr) {
-                    term.writeln(`\r\n\x1b[1;31m[RUNTIME ERROR]\x1b[0m\r\n${runErr.message}`);
-                }
-            }, 100);
+            // Patch Python's input standard function to listen directly to the terminal rows
+            window.customInputReader = () => {
+                return new Promise((resolve) => {
+                    resolveInputSignal = resolve;
+                });
+            };
 
-        } catch (setupErr) {
-            term.writeln(`\r\n\x1b[1;31m[FATAL ERROR] Initialization failure: ${setupErr.message}\x1b[0m`);
+            // Inject an elegant bridge helper right into the Python scope
+            await mp.runPythonAsync(`
+import builtins
+import js
+
+def runtime_input(prompt_text=""):
+    if prompt_text:
+        print(prompt_text, end="")
+    # Use JavaScript promise handlers to grab the typed line data safely
+    promise = js.customInputReader()
+    return promise.toString()
+
+builtins.input = runtime_input
+            `);
+
+            // Execute the virtual computer program
+            await mp.runPythonAsync(pythonCode);
+            term.writeln("\r\n\x1b[1;34m[PROCESS COMPLETED]\x1b[0m");
+
+        } catch (err) {
+            term.writeln(`\r\n\x1b[1;31m[CRITICAL FAULT] ${err.message}\x1b[0m`);
         }
     }
 
