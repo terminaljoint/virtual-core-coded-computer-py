@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Virtual Computer Interface</title>
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.26.1/full/pyodide.js"></script>
+    <style>
+        body { font-family: 'Courier New', monospace; background-color: #1e1e1e; color: #00ff00; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; background: #2d2d2d; padding: 20px; border-radius: 8px; border: 1px solid #444; }
+        button { background: #00ff00; color: #000; border: none; padding: 10px 20px; font-weight: bold; cursor: pointer; border-radius: 4px; }
+        button:hover { background: #00cc00; }
+        #output { background: #000; padding: 15px; border-radius: 4px; min-height: 100px; white-space: pre-wrap; margin-top: 15px; border: 1px solid #555; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>📟 Virtual CPU Dashboard</h2>
+    <p>Click the button below to execute the bytecode program inside the browser via Python.</p>
+    <button onclick="runPythonCPU()">Boot & Run CPU</button>
+    
+    <h3>System Output:</h3>
+    <div id="output">System idle. Awaiting boot...</div>
+</div>
+
+<script>
+    async function runPythonCPU() {
+        let outputDiv = document.getElementById("output");
+        outputDiv.innerText = "Loading Python Runtime Engine...";
+        
+        // 1. Initialize Pyodide
+        let pyodide = await loadPyodide();
+        outputDiv.innerText = "Python Loaded. Executing CPU instructions...\n\n";
+
+        // 2. Pass your exact Python Virtual Machine code as a string template
+        let pythonCode = `
+class VirtualComputer:
+    def __init__(self):
+        self.memory = [0] * 256
+        self.reg_A = 0
+        self.reg_B = 0
+        self.pc = 0
+        self.running = True
+        self.logs = []
+
+    def load_program(self, instructions):
+        for i, bytecode in enumerate(instructions):
+            self.memory[i] = bytecode
+
+    def step(self):
+        instruction = self.memory[self.pc]
+        self.pc += 1
+
+        if instruction == 0x00:
+            self.running = False
+        elif instruction == 0x01:
+            self.reg_A = self.memory[self.pc]
+            self.pc += 1
+        elif instruction == 0x04:
+            self.logs.append(f"[CPU OUTPUT]: {self.reg_A}")
+        elif instruction == 0x08:
+            self.reg_A -= 1
+
+    def run(self):
+        while self.running:
+            self.step()
+        return "\\n".join(self.logs)
+
+vm = VirtualComputer()
+program = [0x01, 5, 0x04, 0x08, 0x04, 0x00] # Load 5, Print, Decrement, Print, Halt
+vm.load_program(program)
+result = vm.run()
+result
+`;
+
+        // 3. Run the Python code and catch the returned logs
+        try {
+            let cpuOutputs = await pyodide.runPythonAsync(pythonCode);
+            outputDiv.innerText += cpuOutputs + "\n\n--- CPU Halted Gracefully ---";
+        } catch (err) {
+            outputDiv.innerText = "Error running CPU: " + err;
+        }
+    }
+</script>
+
+</body>
+</html>
