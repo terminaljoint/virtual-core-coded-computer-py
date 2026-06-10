@@ -3,169 +3,170 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GitHub Pages Python Runner</title>
+    <title>Linux Terminal Python Runner</title>
+    
     <script src="https://cdn.jsdelivr.net/pyodide/v0.26.1/full/pyodide.js"></script>
+    
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.3.0/css/xterm.min.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.3.0/lib/xterm.min.js"></script>
+    
     <style>
         body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-            background-color: #f4f4f9;
+            background-color: #121212;
+            color: #ffffff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
         .container {
-            max-width: 800px;
-            margin: 0 auto;
-        }
-        textarea {
             width: 100%;
-            height: 250px;
-            font-family: 'Courier New', Courier, monospace;
-            font-size: 14px;
+            max-width: 900px;
+        }
+        h2 {
+            margin-bottom: 5px;
+            color: #4CAF50;
+        }
+        p {
+            color: #888;
+            margin-top: 0;
+            margin-bottom: 15px;
+        }
+        /* Linux Terminal Container styling */
+        #terminal-container {
+            width: 100%;
             padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            box-sizing: border-box;
-            background-color: #fff;
-        }
-        button {
-            margin-top: 10px;
-            padding: 10px 20px;
-            font-size: 16px;
-            background-color: #2ea44f;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
-        }
-        button:disabled {
-            background-color: #cccccc;
-            cursor: not-allowed;
-        }
-        #output {
-            margin-top: 20px;
-            padding: 15px;
-            background-color: #1e1e1e;
-            color: #ffffff;
-            font-family: 'Courier New', Courier, monospace;
-            border-radius: 4px;
-            white-space: pre-wrap;
-            min-height: 80px;
-            box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
-        }
-        .status {
-            font-weight: bold;
-            color: #555;
-            padding: 8px;
-            background-color: #e2e3e5;
-            border-radius: 4px;
-            display: inline-block;
+            background-color: #000000;
+            border-radius: 6px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.8);
+            border: 1px solid #333;
         }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>GitHub Pages Auto-Python Executor</h2>
-    <p class="status" id="status">🔄 Setting up environment and fetching main.py...</p>
+    <h2>Linux Terminal Python Runner</h2>
+    <p id="status">🔄 Initializing terminal system and pulling main.py...</p>
     
-    <p><strong>Code from main.py:</strong></p>
-    <textarea id="code" disabled>Loading code from repository...</textarea>
-    
-    <br>
-    <button id="run-btn" onclick="runPython()" disabled>Run Code Again</button>
-
-    <h3>Console Output:</h3>
-    <div id="output">Preparing Pyodide environment...</div>
+    <div id="terminal-container">
+        <div id="terminal"></div>
+    </div>
 </div>
 
 <script>
+    let term;
     let pyodide;
+    let inputResolve = null;
+    let currentInputLine = "";
 
-    async function init() {
+    // 1. Initialize the Xterm.js terminal view layout
+    function initTerminal() {
+        term = new Terminal({
+            cursorBlink: true,
+            fontSize: 15,
+            fontFamily: '"Courier New", Courier, monospace',
+            theme: {
+                background: '#000000',
+                foreground: '#ffffff',
+                cursor: '#ffffff'
+            }
+        });
+        term.open(document.getElementById('terminal'));
+        term.writeln("\x1b[1;32m[SYSTEM]\x1b[0m Initializing environment backend...");
+
+        // Listen for user keyboard strokes inside the terminal window
+        term.onData(data => {
+            // Handle Enter keypress
+            if (data === '\r') { 
+                term.write('\r\n');
+                if (inputResolve) {
+                    let resolve = inputResolve;
+                    inputResolve = null;
+                    resolve(currentInputLine); // Send string over to Python's input() stream
+                }
+                currentInputLine = "";
+            } 
+            // Handle Backspace keypress
+            else if (data === '\x7F') { 
+                if (currentInputLine.length > 0) {
+                    currentInputLine = currentInputLine.slice(0, -1);
+                    term.write('\b \b'); // Clear character off xterm view layout
+                }
+            } 
+            // Handle regular input characters (filtering out arrow keys/control characters)
+            else if (data.charCodeAt(0) >= 32 && data.charCodeAt(0) < 127) {
+                currentInputLine += data;
+                term.write(data);
+            }
+        });
+    }
+
+    // 2. Main Logic Orchestration Loop
+    async function main() {
+        initTerminal();
         const statusEl = document.getElementById("status");
-        const outputEl = document.getElementById("output");
-        const codeEl = document.getElementById("code");
-        const btnEl = document.getElementById("run-btn");
 
         try {
-            // 1. Initialize Pyodide WASM environment
+            // Initialize WebAssembly runtime environment
             pyodide = await loadPyodide();
             
-            // 2. Fetch main.py with a timestamp parameter to bypass GitHub caching
+            // Bypass asset cache filters
             const timestamp = new Date().getTime();
             const response = await fetch(`main.py?t=${timestamp}`);
             
             if (!response.ok) {
-                throw new Error(`Could not fetch main.py (Status: ${response.status}). Make sure main.py exists in the same folder.`);
+                throw new Error(`Failed to load main.py (Status: ${response.status})`);
             }
             const pythonCode = await response.text();
 
-            // 3. Inject code into UI and enable elements
-            codeEl.value = pythonCode;
-            statusEl.innerText = "✅ Ready: Environment loaded and main.py fetched!";
-            statusEl.style.backgroundColor = "#d4edda";
-            statusEl.style.color = "#155724";
-            codeEl.disabled = false;
-            btnEl.disabled = false;
+            statusEl.innerText = "✅ System Online: Running main.py inside terminal console layout below.";
+            statusEl.style.color = "#4CAF50";
             
-            // 4. Automatically run the fetched script immediately
-            runPython();
+            term.writeln("\x1b[1;32m[SYSTEM]\x1b[0m main.py loaded. Executing program...\r\n");
+
+            // Direct standard print commands to Xterm console layouts
+            pyodide.setStdout({
+                write: (buffer) => {
+                    // Normalize standard string feed formats over to xterm line break sequences
+                    const text = String.fromCharCode.apply(null, buffer).replace(/\n/g, '\r\n');
+                    term.write(text);
+                }
+            });
+
+            pyodide.setStderr({
+                write: (buffer) => {
+                    const text = String.fromCharCode.apply(null, buffer).replace(/\n/g, '\r\n');
+                    term.write(`\x1b[1;31m${text}\x1b[0m`); // Highlight standard error logs in Red font
+                }
+            });
+
+            // Map standard inline inputs via Promises 
+            pyodide.setStdin({
+                stdin: () => {
+                    // Creates an active waiting state until user hits Enter key in the terminal UI
+                    return new Promise((resolve) => {
+                        inputResolve = resolve;
+                    });
+                }
+            });
+
+            // Run scripts asynchronously via native execution architectures
+            await pyodide.runPythonAsync(pythonCode);
+            
+            term.writeln("\r\n\x1b[1;34m[PROCESS COMPLETED]\x1b[0m");
 
         } catch (err) {
-            statusEl.innerText = "❌ Initialization Error";
-            statusEl.style.backgroundColor = "#f8d7da";
-            statusEl.style.color = "#721c24";
-            outputEl.innerText = err.message;
+            statusEl.innerText = "❌ Initialization/Execution Error";
+            statusEl.style.color = "#ff3333";
+            term.writeln(`\r\n\x1b[1;31m[ERROR] ${err.message}\x1b[0m`);
         }
     }
-    
-    // Kick off the script asset loader on page load
-    init();
 
-    async function runPython() {
-        if (!pyodide) return;
-
-        const code = document.getElementById("code").value;
-        const outputDiv = document.getElementById("output");
-        outputDiv.innerText = "Running script...";
-
-        // Set up streams to intercept output and map Python's input() to JS prompt()
-        pyodide.runPython(`
-            import sys
-            import io
-            import builtins
-
-            sys.stdout = io.StringIO()
-            sys.stderr = io.StringIO()
-
-            def custom_input(prompt_text=""):
-                import js
-                user_response = js.window.prompt(prompt_text)
-                if user_response is None:
-                    return ""
-                return user_response
-
-            builtins.input = custom_input
-        `);
-
-        try {
-            // Run code asynchronously
-            await pyodide.runPythonAsync(code);
-            
-            // Pull the contents out of the intercepted strings
-            let stdout = pyodide.runPython("sys.stdout.getvalue()");
-            let stderr = pyodide.runPython("sys.stderr.getvalue()");
-
-            if (stderr) {
-                outputDiv.innerText = stdout + "\n[Runtime Error]:\n" + stderr;
-            } else {
-                outputDiv.innerText = stdout || "Code ran completely with zero console outputs.";
-            }
-        } catch (err) {
-            // Captures full tracebacks and errors from Python scripts
-            outputDiv.innerText = "Compilation/Execution Error:\n" + err.message;
-        }
-    }
+    // Fire application launch cycle setup scripts
+    main();
 </script>
 
 </body>
