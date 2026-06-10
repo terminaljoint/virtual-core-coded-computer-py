@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>In-Browser Python Runner</title>
+    <title>GitHub Pages Python Runner</title>
     <script src="https://cdn.jsdelivr.net/pyodide/v0.26.1/full/pyodide.js"></script>
     <style>
         body {
@@ -17,23 +17,25 @@
         }
         textarea {
             width: 100%;
-            height: 200px;
+            height: 250px;
             font-family: 'Courier New', Courier, monospace;
             font-size: 14px;
             padding: 10px;
             border: 1px solid #ccc;
             border-radius: 4px;
             box-sizing: border-box;
+            background-color: #fff;
         }
         button {
             margin-top: 10px;
             padding: 10px 20px;
             font-size: 16px;
-            background-color: #007bff;
+            background-color: #2ea44f;
             color: white;
             border: none;
             border-radius: 4px;
             cursor: pointer;
+            font-weight: bold;
         }
         button:disabled {
             background-color: #cccccc;
@@ -47,67 +49,87 @@
             font-family: 'Courier New', Courier, monospace;
             border-radius: 4px;
             white-space: pre-wrap;
-            min-height: 50px;
+            min-height: 80px;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
         }
         .status {
             font-weight: bold;
             color: #555;
+            padding: 8px;
+            background-color: #e2e3e5;
+            border-radius: 4px;
+            display: inline-block;
         }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>In-Browser Python Executor</h2>
-    <p class="status" id="status">Loading Pyodide runtime environment (please wait)...</p>
+    <h2>GitHub Pages Auto-Python Executor</h2>
+    <p class="status" id="status">🔄 Setting up environment and fetching main.py...</p>
     
-    <textarea id="code" disabled># Write your Python code here
-def greet(name):
-    return f"Hello, {name}!"
-
-print(greet("World"))
-
-for i in range(5):
-    print(f"Line {i+1}")
-</textarea>
+    <p><strong>Code from main.py:</strong></p>
+    <textarea id="code" disabled>Loading code from repository...</textarea>
     
     <br>
-    <button id="run-btn" onclick="runPython()" disabled>Run Code</button>
+    <button id="run-btn" onclick="runPython()" disabled>Run Code Again</button>
 
-    <h3>Output:</h3>
-    <div id="output">Initialize the environment first...</div>
+    <h3>Console Output:</h3>
+    <div id="output">Preparing Pyodide environment...</div>
 </div>
 
 <script>
     let pyodide;
 
-    // Initialize Pyodide
-    async function main() {
+    async function init() {
+        const statusEl = document.getElementById("status");
+        const outputEl = document.getElementById("output");
+        const codeEl = document.getElementById("code");
+        const btnEl = document.getElementById("run-btn");
+
         try {
+            // 1. Initialize Pyodide WASM environment
             pyodide = await loadPyodide();
-            document.getElementById("status").innerText = "Pyodide Environment Ready!";
-            document.getElementById("status").style.color = "green";
-            document.getElementById("code").disabled = false;
-            document.getElementById("run-btn").disabled = false;
-            document.getElementById("output").innerText = "Ready to run code.";
+            
+            // 2. Fetch main.py with a timestamp parameter to bypass GitHub caching
+            const timestamp = new Date().getTime();
+            const response = await fetch(`main.py?t=${timestamp}`);
+            
+            if (!response.ok) {
+                throw new Error(`Could not fetch main.py (Status: ${response.status}). Make sure main.py exists in the same folder.`);
+            }
+            const pythonCode = await response.text();
+
+            // 3. Inject code into UI and enable elements
+            codeEl.value = pythonCode;
+            statusEl.innerText = "✅ Ready: Environment loaded and main.py fetched!";
+            statusEl.style.backgroundColor = "#d4edda";
+            statusEl.style.color = "#155724";
+            codeEl.disabled = false;
+            btnEl.disabled = false;
+            
+            // 4. Automatically run the fetched script immediately
+            runPython();
+
         } catch (err) {
-            document.getElementById("status").innerText = "Failed to load Pyodide.";
-            document.getElementById("status").style.color = "red";
-            document.getElementById("output").innerText = err;
+            statusEl.innerText = "❌ Initialization Error";
+            statusEl.style.backgroundColor = "#f8d7da";
+            statusEl.style.color = "#721c24";
+            outputEl.innerText = err.message;
         }
     }
     
-    main();
+    // Kick off the script asset loader on page load
+    init();
 
-    // Function to run the Python code
     async function runPython() {
         if (!pyodide) return;
 
         const code = document.getElementById("code").value;
         const outputDiv = document.getElementById("output");
-        outputDiv.innerText = "Running...";
+        outputDiv.innerText = "Running script...";
 
-        // Redirect standard output (print statements) to our HTML element
+        // Set up streams to intercept standard output and error messages
         pyodide.runPython(`
             import sys
             import io
@@ -116,20 +138,20 @@ for i in range(5):
         `);
 
         try {
-            // Execute user code
+            // Run code asynchronously
             await pyodide.runPythonAsync(code);
             
-            // Capture stdout/stderr
+            // Pull the contents out of the intercepted strings
             let stdout = pyodide.runPython("sys.stdout.getvalue()");
             let stderr = pyodide.runPython("sys.stderr.getvalue()");
 
             if (stderr) {
-                outputDiv.innerText = stdout + "\nError:\n" + stderr;
+                outputDiv.innerText = stdout + "\n[Runtime Error]:\n" + stderr;
             } else {
-                outputDiv.innerText = stdout || "Code executed successfully with no output.";
+                outputDiv.innerText = stdout || "Code ran completely with zero console outputs.";
             }
         } catch (err) {
-            outputDiv.innerText = "Execution Error:\n" + err;
+            outputDiv.innerText = "Compilation/Execution Error:\n" + err;
         }
     }
 </script>
