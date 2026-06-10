@@ -16,70 +16,49 @@
 <body>
 
 <div class="container">
-    <h2>📟 Virtual CPU Dashboard</h2>
-    <p>Click the button below to execute the bytecode program inside the browser via Python.</p>
-    <button onclick="runPythonCPU()">Boot & Run CPU</button>
+    <h2>📟 Virtual CPU Live Dashboard</h2>
+    <p>This page pulls your raw <strong>main.py</strong> file from GitHub and runs it inside the browser!</p>
+    <button onclick="runLivePythonCPU()">Boot & Run main.py</button>
     
     <h3>System Output:</h3>
     <div id="output">System idle. Awaiting boot...</div>
 </div>
 
 <script>
-    async function runPythonCPU() {
+    async function runLivePythonCPU() {
         let outputDiv = document.getElementById("output");
-        outputDiv.innerText = "Loading Python Runtime Engine...";
+        outputDiv.innerText = "Connecting to Python engine...";
         
-        // 1. Initialize Pyodide
-        let pyodide = await loadPyodide();
-        outputDiv.innerText = "Python Loaded. Executing CPU instructions...\n\n";
-
-        // 2. Pass your exact Python Virtual Machine code as a string template
-        let pythonCode = `
-class VirtualComputer:
-    def __init__(self):
-        self.memory = [0] * 256
-        self.reg_A = 0
-        self.reg_B = 0
-        self.pc = 0
-        self.running = True
-        self.logs = []
-
-    def load_program(self, instructions):
-        for i, bytecode in enumerate(instructions):
-            self.memory[i] = bytecode
-
-    def step(self):
-        instruction = self.memory[self.pc]
-        self.pc += 1
-
-        if instruction == 0x00:
-            self.running = False
-        elif instruction == 0x01:
-            self.reg_A = self.memory[self.pc]
-            self.pc += 1
-        elif instruction == 0x04:
-            self.logs.append(f"[CPU OUTPUT]: {self.reg_A}")
-        elif instruction == 0x08:
-            self.reg_A -= 1
-
-    def run(self):
-        while self.running:
-            self.step()
-        return "\\n".join(self.logs)
-
-vm = VirtualComputer()
-program = [0x01, 5, 0x04, 0x08, 0x04, 0x00] # Load 5, Print, Decrement, Print, Halt
-vm.load_program(program)
-result = vm.run()
-result
-`;
-
-        // 3. Run the Python code and catch the returned logs
         try {
-            let cpuOutputs = await pyodide.runPythonAsync(pythonCode);
-            outputDiv.innerText += cpuOutputs + "\n\n--- CPU Halted Gracefully ---";
+            // 1. Initialize Pyodide
+            let pyodide = await loadPyodide();
+            outputDiv.innerText = "Fetching your live main.py file...\n";
+
+            // 2. Fetch the text content of your main.py file
+            let response = await fetch('main.py');
+            if (!response.ok) {
+                throw new Error("Could not find or read main.py in this folder.");
+            }
+            let pythonCode = await response.text();
+
+            outputDiv.innerText += "Booting Virtual Machine and running countdown...\n\n";
+
+            // 3. Force Python's print() function to route into our HTML window
+            pyodide.runPython(`
+                import sys
+                import io
+                sys.stdout = io.StringIO()
+            `);
+
+            // 4. Run your exact main.py file content
+            await pyodide.runPythonAsync(pythonCode);
+
+            // 5. Grab everything your main.py printed out and display it
+            let stdout = pyodide.runPython("sys.stdout.getvalue()");
+            outputDiv.innerText += stdout + "\n--- CPU Halted Gracefully ---";
+
         } catch (err) {
-            outputDiv.innerText = "Error running CPU: " + err;
+            outputDiv.innerText = "Execution Error: " + err;
         }
     }
 </script>
