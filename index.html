@@ -43,19 +43,33 @@
 
             outputDiv.innerText += "Booting Virtual Machine and running countdown...\n\n";
 
-            // 🔥 FIX: Redirect stdout BEFORE running the main script logic
-            await pyodide.runPythonAsync(`
-                import sys
-                import io
-                sys.stdout = io.StringIO()
-            `);
+            // 3. Write main.py to Pyodide's virtual local file system
+            pyodide.FS.writeFile("main.py", pythonCode);
 
-            // 3. Run your exact main.py file content
-            await pyodide.runPythonAsync(pythonCode);
+            // 4. Run a tiny control script that safely handles the IO stream AND executes the file
+            let runnerScript = `
+import sys
+import io
 
-            // 4. Grab everything your main.py printed out and display it
-            let stdout = pyodide.runPython("sys.stdout.getvalue()");
-            
+# Setup the safe string buffer for printing
+sys.stdout = io.StringIO()
+
+# Execute the file as a true main module
+import traceback
+try:
+    with open("main.py", "r") as f:
+        exec(f.read(), {"__name__": "__main__"})
+except Exception as e:
+    print("Python Runtime Error:", traceback.format_exc())
+
+# Extract the logs out
+output_data = sys.stdout.getvalue()
+output_data
+`;
+
+            // 5. Run our wrapper script and capture everything
+            let stdout = await pyodide.runPythonAsync(runnerScript);
+
             if (stdout.trim() === "") {
                 outputDiv.innerText += "The program executed, but nothing was printed.\n";
             } else {
