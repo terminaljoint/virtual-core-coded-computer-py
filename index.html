@@ -129,12 +129,23 @@
         const outputDiv = document.getElementById("output");
         outputDiv.innerText = "Running script...";
 
-        // Set up streams to intercept standard output and error messages
+        // Set up streams to intercept output and map Python's input() to JS prompt()
         pyodide.runPython(`
             import sys
             import io
+            import builtins
+
             sys.stdout = io.StringIO()
             sys.stderr = io.StringIO()
+
+            def custom_input(prompt_text=""):
+                import js
+                user_response = js.window.prompt(prompt_text)
+                if user_response is None:
+                    return ""
+                return user_response
+
+            builtins.input = custom_input
         `);
 
         try {
@@ -151,7 +162,7 @@
                 outputDiv.innerText = stdout || "Code ran completely with zero console outputs.";
             }
         } catch (err) {
-            // FIX APPLIED: Using err.message exposes the deep, descriptive Python traceback
+            // Captures full tracebacks and errors from Python scripts
             outputDiv.innerText = "Compilation/Execution Error:\n" + err.message;
         }
     }
