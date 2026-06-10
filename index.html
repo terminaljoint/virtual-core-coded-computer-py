@@ -41,41 +41,44 @@
             }
             let pythonCode = await response.text();
 
-            outputDiv.innerText += "Booting Virtual Machine and running countdown...\n\n";
+            outputDiv.innerText += "Executing main.py...\n\n";
 
-            // 3. Write main.py to Pyodide's virtual local file system
+            // 3. Write main.py to Pyodide's virtual file system
             pyodide.FS.writeFile("main.py", pythonCode);
 
-            // 4. Run a tiny control script that safely handles the IO stream AND executes the file
+            // 4. The absolute bulletproof runner script
             let runnerScript = `
 import sys
 import io
 
-# Setup the safe string buffer for printing
+# Direct standard output to our virtual text stream
 sys.stdout = io.StringIO()
+sys.stderr = io.StringIO()
 
-# Execute the file as a true main module
 import traceback
 try:
     with open("main.py", "r") as f:
+        # We pass empty globals/locals to mimic a fresh command line run
         exec(f.read(), {"__name__": "__main__"})
 except Exception as e:
-    print("Python Runtime Error:", traceback.format_exc())
+    # If the user's python script has a syntax error, catch it and print it
+    print(traceback.format_exc())
 
-# Extract the logs out
+# Force pull everything left in the buffer
+sys.stdout.flush()
 output_data = sys.stdout.getvalue()
 output_data
 `;
 
-            // 5. Run our wrapper script and capture everything
+            // 5. Run it and capture the string output
             let stdout = await pyodide.runPythonAsync(runnerScript);
 
-            if (stdout.trim() === "") {
-                outputDiv.innerText += "The program executed, but nothing was printed.\n";
+            // 6. Display the exact output of the file
+            if (stdout) {
+                outputDiv.innerText += stdout;
             } else {
-                outputDiv.innerText += stdout + "\n";
+                outputDiv.innerText += "[Program finished running with no console output]";
             }
-            outputDiv.innerText += "--- CPU Halted Gracefully ---";
 
         } catch (err) {
             outputDiv.innerText = "Execution Error: " + err;
