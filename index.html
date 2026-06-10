@@ -29,33 +29,33 @@
 </head>
 <body>
 
-    <script type="py" id="runner-script" terminal worker>
+    <script type="py" id="runner" terminal worker>
 import sys
 import asyncio
 from pyodide.http import pyfetch
 import time
+import js
 
 async def boot_system():
     print("\x1b[1;32m[SYSTEM]\x1b[0m Booting terminal console engine...")
     print("\x1b[1;32m[SYSTEM]\x1b[0m Pulling main.py from repository directory...\n")
     
     try:
-        # Determine the absolute path dynamically via the browser window's location
-        import js
-        current_url = js.WorkerGlobalScope.self.location.href
-        base_dir = current_url.rsplit('/', 1)[0]
+        # Read the custom data-url attribute we set using JavaScript below
+        script_element = js.document.getElementById("runner")
+        base_dir = script_element.getAttribute("data-url")
         
         timestamp = int(time.time())
         target_url = f"{base_dir}/main.py?t={timestamp}"
         
-        # Fetch using the perfectly constructed absolute string
+        # Fetch directly using the perfect string
         response = await pyfetch(target_url)
         
         if response.status != 200:
             print(f"\x1b[1;31m[ERROR] Could not load main.py (Status: {response.status})\x1b[0m")
             return
             
-        # Save it into the memory layer
+        # Write bytes safely to internal storage
         with open("main.py", "wb") as f:
             f.write(await response.bytes())
             
@@ -66,8 +66,17 @@ async def boot_system():
     except Exception as e:
         print(f"\n\x1b[1;31m[CRITICAL ERROR] Execution failed: {str(e)}\x1b[0m")
 
-# Execute the async loop
+# Execute the background loop
 asyncio.ensure_future(boot_system())
+    </script>
+
+    <script>
+        // Main thread JavaScript figures out the clean path safely
+        const currentHref = window.location.href;
+        const cleanPath = currentHref.substring(0, currentHref.lastIndexOf('/'));
+        
+        // Inject the clean path straight into the PyScript tag attributes
+        document.getElementById("runner").setAttribute("data-url", cleanPath);
     </script>
 
 </body>
