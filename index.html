@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Linux Terminal Python Runner</title>
+    <title>Terminal Console</title>
     
     <script src="https://cdn.jsdelivr.net/pyodide/v0.26.1/full/pyodide.js"></script>
     
@@ -11,161 +11,130 @@
     <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.3.0/lib/xterm.min.js"></script>
     
     <style>
-        body {
-            background-color: #121212;
-            color: #ffffff;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        /* Force the terminal window to occupy the absolute entire viewport */
+        html, body {
             margin: 0;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-        .container {
+            padding: 0;
             width: 100%;
-            max-width: 900px;
-        }
-        h2 {
-            margin-bottom: 5px;
-            color: #4CAF50;
-        }
-        p {
-            color: #888;
-            margin-top: 0;
-            margin-bottom: 15px;
-        }
-        /* Linux Terminal Container styling */
-        #terminal-container {
-            width: 100%;
-            padding: 10px;
+            height: 100%;
             background-color: #000000;
-            border-radius: 6px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.8);
-            border: 1px solid #333;
+            overflow: hidden;
+        }
+        #terminal {
+            width: 100%;
+            height: 100%;
+            padding: 10px;
+            box-sizing: border-box;
         }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h2>Linux Terminal Python Runner</h2>
-    <p id="status">🔄 Initializing terminal system and pulling main.py...</p>
-    
-    <div id="terminal-container">
-        <div id="terminal"></div>
-    </div>
-</div>
+<div id="terminal"></div>
 
 <script>
     let term;
     let pyodide;
-    let inputResolve = null;
     let currentInputLine = "";
+    let inputResolve = null;
 
-    // 1. Initialize the Xterm.js terminal view layout
-    function initTerminal() {
+    // 1. Initialize Xterm view across 100% viewport dimensions
+    function initTerminalUI() {
         term = new Terminal({
             cursorBlink: true,
-            fontSize: 15,
+            fontSize: 16,
             fontFamily: '"Courier New", Courier, monospace',
             theme: {
                 background: '#000000',
                 foreground: '#ffffff',
                 cursor: '#ffffff'
-            }
+            },
+            convertEol: true // Automatically handle line breaks mapping properly
         });
         term.open(document.getElementById('terminal'));
-        term.writeln("\x1b[1;32m[SYSTEM]\x1b[0m Initializing environment backend...");
-
-        // Listen for user keyboard strokes inside the terminal window
-        term.onData(data => {
-            // Handle Enter keypress
-            if (data === '\r') { 
-                term.write('\r\n');
-                if (inputResolve) {
-                    let resolve = inputResolve;
-                    inputResolve = null;
-                    resolve(currentInputLine); // Send string over to Python's input() stream
-                }
-                currentInputLine = "";
-            } 
-            // Handle Backspace keypress
-            else if (data === '\x7F') { 
-                if (currentInputLine.length > 0) {
-                    currentInputLine = currentInputLine.slice(0, -1);
-                    term.write('\b \b'); // Clear character off xterm view layout
-                }
-            } 
-            // Handle regular input characters (filtering out arrow keys/control characters)
-            else if (data.charCodeAt(0) >= 32 && data.charCodeAt(0) < 127) {
-                currentInputLine += data;
-                term.write(data);
-            }
-        });
+        term.writeln("\x1b[1;32m[SYSTEM]\x1b[0m Initializing terminal console engine...");
     }
 
-    // 2. Main Logic Orchestration Loop
+    // 2. Main Logic Execution Flow 
     async function main() {
-        initTerminal();
-        const statusEl = document.getElementById("status");
+        initTerminalUI();
 
         try {
-            // Initialize WebAssembly runtime environment
+            // Fetch WebAssembly framework backend
             pyodide = await loadPyodide();
             
-            // Bypass asset cache filters
+            // Bypass GitHub's content delivery caching networks
             const timestamp = new Date().getTime();
             const response = await fetch(`main.py?t=${timestamp}`);
             
             if (!response.ok) {
-                throw new Error(`Failed to load main.py (Status: ${response.status})`);
+                throw new Error(`Failed to read main.py file (Status: ${response.status})`);
             }
             const pythonCode = await response.text();
 
-            statusEl.innerText = "✅ System Online: Running main.py inside terminal console layout below.";
-            statusEl.style.color = "#4CAF50";
-            
-            term.writeln("\x1b[1;32m[SYSTEM]\x1b[0m main.py loaded. Executing program...\r\n");
+            term.writeln("\x1b[1;32m[SYSTEM]\x1b[0m main.py loaded. Running execution runtime...\r\n");
 
-            // Direct standard print commands to Xterm console layouts
+            // Direct Python standard output print buffers directly onto xterm frames
             pyodide.setStdout({
                 write: (buffer) => {
-                    // Normalize standard string feed formats over to xterm line break sequences
-                    const text = String.fromCharCode.apply(null, buffer).replace(/\n/g, '\r\n');
+                    const text = String.fromCharCode.apply(null, buffer);
                     term.write(text);
                 }
             });
 
             pyodide.setStderr({
                 write: (buffer) => {
-                    const text = String.fromCharCode.apply(null, buffer).replace(/\n/g, '\r\n');
-                    term.write(`\x1b[1;31m${text}\x1b[0m`); // Highlight standard error logs in Red font
+                    const text = String.fromCharCode.apply(null, buffer);
+                    term.write(`\x1b[1;31m${text}\x1b[0m`); // Highlight compilation faults in Red
                 }
             });
 
-            // Map standard inline inputs via Promises 
+            // Handle typing key-mapping capture streams
+            term.onData(data => {
+                if (inputResolve) {
+                    // Check for Enter keypress
+                    if (data === '\r') {
+                        term.write('\r\n');
+                        const resolve = inputResolve;
+                        inputResolve = null;
+                        resolve(currentInputLine);
+                        currentInputLine = "";
+                    } 
+                    // Check for Backspace keypress
+                    else if (data === '\x7F') {
+                        if (currentInputLine.length > 0) {
+                            currentInputLine = currentInputLine.slice(0, -1);
+                            term.write('\b \b');
+                        }
+                    } 
+                    // Record regular alphanumeric print characters
+                    else if (data.charCodeAt(0) >= 32 && data.charCodeAt(0) < 127) {
+                        currentInputLine += data;
+                        term.write(data);
+                    }
+                }
+            });
+
+            // Map synchronous direct text input requests safely via JavaScript proxies
             pyodide.setStdin({
                 stdin: () => {
-                    // Creates an active waiting state until user hits Enter key in the terminal UI
                     return new Promise((resolve) => {
                         inputResolve = resolve;
                     });
                 }
             });
 
-            // Run scripts asynchronously via native execution architectures
+            // Execute Python payload logic asynchronously
             await pyodide.runPythonAsync(pythonCode);
             
             term.writeln("\r\n\x1b[1;34m[PROCESS COMPLETED]\x1b[0m");
 
         } catch (err) {
-            statusEl.innerText = "❌ Initialization/Execution Error";
-            statusEl.style.color = "#ff3333";
-            term.writeln(`\r\n\x1b[1;31m[ERROR] ${err.message}\x1b[0m`);
+            term.writeln(`\r\n\x1b[1;31m[CRITICAL ERROR] ${err.message}\x1b[0m`);
         }
     }
 
-    // Fire application launch cycle setup scripts
+    // Initialize execution system engine
     main();
 </script>
 
