@@ -91,4 +91,4 @@ program = [
 
 vm = VirtualComputer()
 vm.load_program(program)
-#vm.run()
+vm.run()
