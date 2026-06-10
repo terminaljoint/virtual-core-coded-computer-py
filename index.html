@@ -150,8 +150,11 @@
             } else {
                 outputDiv.innerText = stdout || "Code ran completely with zero console outputs.";
             }
-        } catch (err) {
-            outputDiv.innerText = "Compilation/Execution Error:\n" + err;
+        } } catch (err) {
+    // Using err.message extracts the full Python traceback text
+    outputDiv.innerText = "Compilation/Execution Error:\n" + err.message;
+    }
+    
         }
     }
 </script>
