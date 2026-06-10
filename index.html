@@ -1,4 +1,4 @@
-<!DOCTYPE html> 
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -150,11 +150,9 @@
             } else {
                 outputDiv.innerText = stdout || "Code ran completely with zero console outputs.";
             }
-        } } catch (err) {
-    // Using err.message extracts the full Python traceback text
-    outputDiv.innerText = "Compilation/Execution Error:\n" + err.message;
-    }
-    
+        } catch (err) {
+            // FIX APPLIED: Using err.message exposes the deep, descriptive Python traceback
+            outputDiv.innerText = "Compilation/Execution Error:\n" + err.message;
         }
     }
 </script>
