@@ -9,7 +9,6 @@
     <script type="module" src="https://pyscript.net/releases/2024.11.1/core.js"></script>
     
     <style>
-        /* Force the terminal emulator to take up the absolute entire web page */
         html, body {
             margin: 0;
             padding: 0;
@@ -18,15 +17,11 @@
             background-color: #000000;
             overflow: hidden;
         }
-        
-        /* Style the built-in PyScript terminal tag to occupy 100% space */
         script[type="py"], py-script, xterm-terminal, .pyscript-terminal {
             width: 100% !important;
             height: 100% !important;
             box-sizing: border-box;
         }
-        
-        /* Fine-tune padding of the interior terminal window */
         .terminal {
             padding: 15px !important;
         }
@@ -34,45 +29,44 @@
 </head>
 <body>
 
-    <script type="py" terminal worker>
+    <script type="py" id="runner-script" terminal worker>
 import sys
 import asyncio
-import js
 from pyodide.http import pyfetch
+import time
 
 async def boot_system():
     print("\x1b[1;32m[SYSTEM]\x1b[0m Booting terminal console engine...")
     print("\x1b[1;32m[SYSTEM]\x1b[0m Pulling main.py from repository directory...\n")
     
     try:
-        import time
-        from urllib.parse import urljoin
+        # Determine the absolute path dynamically via the browser window's location
+        import js
+        current_url = js.WorkerGlobalScope.self.location.href
+        base_dir = current_url.rsplit('/', 1)[0]
         
-        # FIXED: Using js.location.href instead of js.window.location.href
-        # This works natively inside worker scopes without crashing!
-        base_url = js.location.href
         timestamp = int(time.time())
-        target_url = urljoin(base_url, f"main.py?t={timestamp}")
+        target_url = f"{base_dir}/main.py?t={timestamp}"
         
-        # Fetch using the absolute validated path
+        # Fetch using the perfectly constructed absolute string
         response = await pyfetch(target_url)
         
         if response.status != 200:
             print(f"\x1b[1;31m[ERROR] Could not load main.py (Status: {response.status})\x1b[0m")
             return
             
-        # Save it locally in the virtual environment container
+        # Save it into the memory layer
         with open("main.py", "wb") as f:
             f.write(await response.bytes())
             
-        # Dynamically execute the main.py file within this clean terminal session context
+        # Execute the python script
         with open("main.py", "r") as f:
             exec(f.read(), globals())
             
     except Exception as e:
         print(f"\n\x1b[1;31m[CRITICAL ERROR] Execution failed: {str(e)}\x1b[0m")
 
-# Execute the async boot loop
+# Execute the async loop
 asyncio.ensure_future(boot_system())
     </script>
 
