@@ -16,12 +16,12 @@
             font-family: 'Courier New', Courier, monospace;
             overflow: hidden;
         }
-        /* Our standalone, unblockable layout container text area */
+        /* Standalone Terminal Textarea */
         #console {
             width: 100%;
             height: 100%;
             background-color: #000000;
-            color: #00ff00; /* Classic green terminal font output color */
+            color: #00ff00; /* Linux green console text */
             border: none;
             padding: 15px;
             box-sizing: border-box;
@@ -42,34 +42,33 @@
     let activeInputResolve = null;
     let lineStartCursorIndex = 0;
 
-    // Helper utilities to handle printing behavior loops safely
     function writeToConsole(text) {
         consoleEl.value += text;
-        consoleEl.scrollTop = consoleEl.scrollHeight; // Auto scroll tracking points
+        consoleEl.scrollTop = consoleEl.scrollHeight;
         lineStartCursorIndex = consoleEl.value.length;
     }
 
     async function startSystemEngine() {
-        writeToConsole("[SYSTEM] Booting console screen engine...\n");
+        writeToConsole("[SYSTEM] Booting terminal console engine...\n");
         
         try {
-            // Find absolute file repository layouts safely
+            // Fetch clean absolute main.py path
             const currentHref = window.location.href;
             const baseDirectory = currentHref.substring(0, currentHref.lastIndexOf('/'));
             const cacheBuster = new Date().getTime();
             const targetFileUrl = `${baseDirectory}/main.py?t=${cacheBuster}`;
 
-            writeToConsole("[SYSTEM] Downloading software package components...\n");
+            writeToConsole("[SYSTEM] Downloading main.py asset components...\n");
             const response = await fetch(targetFileUrl);
-            if (!response.ok) throw new Error(`Could not reach main.py file (Status: ${response.status})`);
+            if (!response.ok) throw new Error(`Could not reach main.py file.`);
             pythonScriptBody = await response.text();
 
-            writeToConsole("[SYSTEM] Initializing base interpreter layer parameters...\n");
+            writeToConsole("[SYSTEM] Initializing base interpreter environment...\n");
             pyodide = await loadPyodide();
             
-            writeToConsole("[SYSTEM] Intersecting stream interfaces. Running program payload...\n\n");
+            writeToConsole("[SYSTEM] Stream bridges online. Executing logic codes...\n\n");
 
-            // Attach standard logging methods straight onto our input/output console viewport
+            // Redirect Python outputs directly to our green console layout
             pyodide.setStdout({
                 write: (buffer) => {
                     const text = String.fromCharCode.apply(null, buffer);
@@ -84,18 +83,30 @@
                 }
             });
 
-            // Map runtime input pause blocks down onto the textarea console interaction handler loops
-            pyodide.setStdin({
-                stdin: () => {
-                    return new Promise((resolve) => {
-                        activeInputResolve = resolve;
-                    });
-                }
-            });
+            // INTERCEPT INPUT BEFORE RUNNING: Patch Python scope directly inside HTML
+            pyodide.runPython(`
+                import builtins
+                import js
 
-            // Monitor keyboard keystrokes natively inside the text element 
+                def HTML_Inline_Input(prompt_text=""):
+                    if prompt_text:
+                        print(prompt_text, end="")
+                    # Request data stream directly via JS promise resolution loops
+                    return js.getTerminalInput()
+
+                builtins.input = HTML_Inline_Input
+            `);
+
+            // Expose the input reader globally so Python code blocks can use it asynchronously
+            window.getTerminalInput = () => {
+                return new Promise((resolve) => {
+                    activeInputResolve = resolve;
+                });
+            };
+
+            // Monitor keystrokes inside the terminal window
             consoleEl.addEventListener("keydown", function(e) {
-                // Lock keyboard control access strictly to active row blocks
+                // Keep the cursor locked to the active line boundary
                 if (consoleEl.selectionStart < lineStartCursorIndex) {
                     consoleEl.setSelectionRange(lineStartCursorIndex, lineStartCursorIndex);
                 }
@@ -109,18 +120,18 @@
                         writeToConsole("\n");
                         const resolve = activeInputResolve;
                         activeInputResolve = null;
-                        resolve(userEnteredText); // Hand inputs back down to the internal compiler
+                        resolve(userEnteredText); // Resume Python execution seamlessly
                     }
                 } 
                 else if (e.key === "Backspace") {
-                    // Prevent users from deleting printed status system line frames
+                    // Prevent deleting terminal output logs
                     if (consoleEl.selectionStart <= lineStartCursorIndex) {
                         e.preventDefault();
                     }
                 }
             });
 
-            // Fire up script execution asynchronously
+            // Execute code with a tiny layout rendering delay
             setTimeout(async () => {
                 try {
                     await pyodide.runPythonAsync(pythonScriptBody);
