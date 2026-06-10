@@ -1,80 +1,65 @@
-class VirtualComputer:
+class VirtualCPU:
     def __init__(self):
-        # 256 bytes of RAM
+        # 1. Memory (RAM): 256 bytes of space initialized to 0
         self.memory = [0] * 256
+        
+        # 2. Registers: Internal CPU storage
+        self.reg_A = 0      # Accumulator (used for math)
+        self.reg_B = 0      # General purpose register
+        
+        # 3. Pointers
+        self.pc = 0         # Program Counter (points to current instruction)
+        
+        # 4. Flags
+        self.zero_flag = False  # Set to True if a math result is 0
 
-        # Registers
-        self.reg_A = 0
-        self.reg_B = 0
-        self.pc = 0
+    def load_program(self, program):
+        """Loads a list of byte instructions into memory starting at address 0"""
+        for i, byte in enumerate(program):
+            self.memory[i] = byte
 
-        self.running = True
-
-    def load_program(self, instructions):
-        for i, bytecode in enumerate(instructions):
-            self.memory[i] = bytecode
-
-    def step(self):
-        if not self.running:
-            return
-
-        # FETCH
-        instruction = self.memory[self.pc]
-        self.pc += 1
-
+    def execute_instruction(self):
+        """The Fetch-Decode-Execute Cycle"""
+        # FETCH: Get the instruction code from memory
+        opcode = self.memory[self.pc]
+        
         # DECODE & EXECUTE
-
-        # LOAD_A value
-        if instruction == 0x01:
-            self.reg_A = self.memory[self.pc]
-            self.pc += 1
-
-        # LOAD_B value
-        elif instruction == 0x02:
-            self.reg_B = self.memory[self.pc]
-            self.pc += 1
-
-        # ADD
-        elif instruction == 0x03:
+        if opcode == 0x00:    # HALT
+            print("CPU Halted.")
+            return False
+            
+        elif opcode == 0x01:  # LOAD_A [value] -> Loads a direct value into Register A
+            self.reg_A = self.memory[self.pc + 1]
+            self.pc += 2
+            
+        elif opcode == 0x02:  # LOAD_B [value] -> Loads a direct value into Register B
+            self.reg_B = self.memory[self.pc + 1]
+            self.pc += 2
+            
+        elif opcode == 0x03:  # ADD -> Adds Reg B to Reg A (ALU Operation)
             self.reg_A = self.reg_A + self.reg_B
-
-        # INPUT_A
-        elif instruction == 0x04:
-            self.reg_A = int(input("Enter a number: "))
-
-        # OUTPUT_A
-        elif instruction == 0x05:
-            print(f"Output: {self.reg_A}")
-
-        # HALT
-        elif instruction == 0x00:
-            self.running = False
-
+            # Update flags
+            self.zero_flag = (self.reg_A == 0)
+            self.pc += 1
+            
+        elif opcode == 0x04:  # SUB -> Subtracts Reg B from Reg A (ALU Operation)
+            self.reg_A = self.reg_A - self.reg_B
+            self.zero_flag = (self.reg_A == 0)
+            self.pc += 1
+            
+        elif opcode == 0x05:  # STORE_A [address] -> Saves Reg A value to RAM
+            address = self.memory[self.pc + 1]
+            self.memory[address] = self.reg_A
+            self.pc += 2
+            
         else:
-            print(f"Unknown instruction: {instruction}")
-            self.running = False
+            print(f"Unknown Opcode: {opcode}. Crashing.")
+            return False
+            
+        return True
 
     def run(self):
-        print("=== Virtual Computer Started ===")
-
-        while self.running:
-            self.step()
-
-        print("=== Virtual Computer Halted ===")
-        print(f"Register A = {self.reg_A}")
-        print(f"Register B = {self.reg_B}")
-        print(f"Program Counter = {self.pc}")
-
-
-
-program = [
-    0x04,      # INPUT_A
-    0x02, 10,  # LOAD_B 10
-    0x03,      # ADD
-    0x05,      # OUTPUT_A
-    0x00       # HALT
-]
-
-vm = VirtualComputer()
-vm.load_program(program)
-vm.run()
+        """Keep running instructions until a HALT command is found"""
+        running = True
+        while running:
+            running = self.execute_instruction()
