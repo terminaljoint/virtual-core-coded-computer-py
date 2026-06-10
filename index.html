@@ -3,11 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Linux Terminal Console</title>
-    
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.3.0/css/xterm.min.css" />
-    <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.3.0/lib/xterm.min.js"></script>
-    
+    <title>Terminal Console</title>
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.26.1/full/pyodide.js"></script>
     <style>
         html, body {
             margin: 0;
@@ -15,125 +12,130 @@
             width: 100%;
             height: 100%;
             background-color: #000000;
+            color: #ffffff;
+            font-family: 'Courier New', Courier, monospace;
             overflow: hidden;
         }
-        #terminal {
+        /* Our standalone, unblockable layout container text area */
+        #console {
             width: 100%;
             height: 100%;
+            background-color: #000000;
+            color: #00ff00; /* Classic green terminal font output color */
+            border: none;
             padding: 15px;
             box-sizing: border-box;
+            font-size: 16px;
+            resize: none;
+            outline: none;
         }
     </style>
 </head>
 <body>
 
-<div id="terminal"></div>
+<textarea id="console" spellcheck="false"></textarea>
 
-<script type="module">
-    // We import MicroPython's ultra-lightweight web assembly library
-    import { loadMicroPython } from 'https://cdn.jsdelivr.net/npm/micropython-webworker@1.1.0/index.js';
+<script>
+    const consoleEl = document.getElementById("console");
+    let pyodide;
+    let pythonScriptBody = "";
+    let activeInputResolve = null;
+    let lineStartCursorIndex = 0;
 
-    let term;
-    let mp;
-    let inputLineBuffer = "";
-    let resolveInputSignal = null;
-
-    // 1. Instantly print terminal layout so your screen is NEVER blank
-    function createTerminalShell() {
-        term = new Terminal({
-            cursorBlink: true,
-            fontSize: 15,
-            fontFamily: '"Courier New", Courier, monospace',
-            theme: { background: '#000000', foreground: '#ffffff', cursor: '#ffffff' },
-            convertEol: true
-        });
-        term.open(document.getElementById('terminal'));
-        term.writeln("\x1b[1;32m[SYSTEM]\x1b[0m Booting ultra-lightweight terminal shell...");
+    // Helper utilities to handle printing behavior loops safely
+    function writeToConsole(text) {
+        consoleEl.value += text;
+        consoleEl.scrollTop = consoleEl.scrollHeight; // Auto scroll tracking points
+        lineStartCursorIndex = consoleEl.value.length;
     }
 
-    // 2. Main Logic Execution Engine
-    async function bootSystem() {
-        createTerminalShell();
-
+    async function startSystemEngine() {
+        writeToConsole("[SYSTEM] Booting console screen engine...\n");
+        
         try {
-            // Find absolute path of repository folder seamlessly
+            // Find absolute file repository layouts safely
             const currentHref = window.location.href;
             const baseDirectory = currentHref.substring(0, currentHref.lastIndexOf('/'));
             const cacheBuster = new Date().getTime();
-            const absoluteTargetUrl = `${baseDirectory}/main.py?t=${cacheBuster}`;
+            const targetFileUrl = `${baseDirectory}/main.py?t=${cacheBuster}`;
 
-            term.writeln("\x1b[1;32m[SYSTEM]\x1b[0m Fetching main.py logic paths...");
-            const response = await fetch(absoluteTargetUrl);
-            if (!response.ok) throw new Error("Could not download main.py file.");
-            let pythonCode = await response.text();
+            writeToConsole("[SYSTEM] Downloading software package components...\n");
+            const response = await fetch(targetFileUrl);
+            if (!response.ok) throw new Error(`Could not reach main.py file (Status: ${response.status})`);
+            pythonScriptBody = await response.text();
 
-            term.writeln("\x1b[1;32m[SYSTEM]\x1b[0m Initializing MicroPython backend runtime environment...");
+            writeToConsole("[SYSTEM] Initializing base interpreter layer parameters...\n");
+            pyodide = await loadPyodide();
             
-            // Initialize the lightweight interpreter instance
-            mp = await loadMicroPython();
-            term.writeln("\x1b[1;32m[SYSTEM]\x1b[0m Core engine online. Initializing software cycles...\r\n");
+            writeToConsole("[SYSTEM] Intersecting stream interfaces. Running program payload...\n\n");
 
-            // Direct standard stdout print chains straight to our UI rows
-            mp.onStdout((text) => {
-                term.write(text);
+            // Attach standard logging methods straight onto our input/output console viewport
+            pyodide.setStdout({
+                write: (buffer) => {
+                    const text = String.fromCharCode.apply(null, buffer);
+                    writeToConsole(text);
+                }
             });
 
-            // Catch keyboard keystroke maps directly
-            term.onData(data => {
-                if (resolveInputSignal) {
-                    if (data === '\r') { // Enter key
-                        term.write('\r\n');
-                        const finalData = inputLineBuffer;
-                        inputLineBuffer = "";
-                        const resolve = resolveInputSignal;
-                        resolveInputSignal = null;
-                        resolve(finalData); // Release execution suspension hooks
-                    } 
-                    else if (data === '\x7F') { // Backspace key
-                        if (inputLineBuffer.length > 0) {
-                            inputLineBuffer = inputLineBuffer.slice(0, -1);
-                            term.write('\b \b');
-                        }
-                    } 
-                    else if (data.charCodeAt(0) >= 32 && data.charCodeAt(0) < 127) {
-                        inputLineBuffer += data;
-                        term.write(data);
+            pyodide.setStderr({
+                write: (buffer) => {
+                    const text = String.fromCharCode.apply(null, buffer);
+                    writeToConsole("\n[ERROR]: " + text);
+                }
+            });
+
+            // Map runtime input pause blocks down onto the textarea console interaction handler loops
+            pyodide.setStdin({
+                stdin: () => {
+                    return new Promise((resolve) => {
+                        activeInputResolve = resolve;
+                    });
+                }
+            });
+
+            // Monitor keyboard keystrokes natively inside the text element 
+            consoleEl.addEventListener("keydown", function(e) {
+                // Lock keyboard control access strictly to active row blocks
+                if (consoleEl.selectionStart < lineStartCursorIndex) {
+                    consoleEl.setSelectionRange(lineStartCursorIndex, lineStartCursorIndex);
+                }
+
+                if (e.key === "Enter") {
+                    e.preventDefault();
+                    if (activeInputResolve) {
+                        const wholeText = consoleEl.value;
+                        const userEnteredText = wholeText.substring(lineStartCursorIndex);
+                        
+                        writeToConsole("\n");
+                        const resolve = activeInputResolve;
+                        activeInputResolve = null;
+                        resolve(userEnteredText); // Hand inputs back down to the internal compiler
+                    }
+                } 
+                else if (e.key === "Backspace") {
+                    // Prevent users from deleting printed status system line frames
+                    if (consoleEl.selectionStart <= lineStartCursorIndex) {
+                        e.preventDefault();
                     }
                 }
             });
 
-            // Patch Python's input standard function to listen directly to the terminal rows
-            window.customInputReader = () => {
-                return new Promise((resolve) => {
-                    resolveInputSignal = resolve;
-                });
-            };
+            // Fire up script execution asynchronously
+            setTimeout(async () => {
+                try {
+                    await pyodide.runPythonAsync(pythonScriptBody);
+                    writeToConsole("\n[PROCESS COMPLETED]");
+                } catch (runErr) {
+                    writeToConsole("\n[RUNTIME FAULT]:\n" + runErr.message);
+                }
+            }, 50);
 
-            // Inject an elegant bridge helper right into the Python scope
-            await mp.runPythonAsync(`
-import builtins
-import js
-
-def runtime_input(prompt_text=""):
-    if prompt_text:
-        print(prompt_text, end="")
-    # Use JavaScript promise handlers to grab the typed line data safely
-    promise = js.customInputReader()
-    return promise.toString()
-
-builtins.input = runtime_input
-            `);
-
-            // Execute the virtual computer program
-            await mp.runPythonAsync(pythonCode);
-            term.writeln("\r\n\x1b[1;34m[PROCESS COMPLETED]\x1b[0m");
-
-        } catch (err) {
-            term.writeln(`\r\n\x1b[1;31m[CRITICAL FAULT] ${err.message}\x1b[0m`);
+        } catch (setupErr) {
+            writeToConsole("\n[FATAL SYSTEM ABORT]: " + setupErr.message);
         }
     }
 
-    bootSystem();
+    startSystemEngine();
 </script>
 
 </body>
