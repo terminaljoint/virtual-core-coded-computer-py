@@ -5,8 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Linux Terminal Console</title>
     
-    <link rel="stylesheet" href="https://pyscript.net/releases/2024.11.1/core.css">
-    <script type="module" src="https://pyscript.net/releases/2024.11.1/core.js"></script>
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.26.1/full/pyodide.js"></script>
+    
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.3.0/css/xterm.min.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.3.0/lib/xterm.min.js"></script>
     
     <style>
         html, body {
@@ -17,67 +19,123 @@
             background-color: #000000;
             overflow: hidden;
         }
-        script[type="py"], py-script, xterm-terminal, .pyscript-terminal {
-            width: 100% !important;
-            height: 100% !important;
+        #terminal {
+            width: 100%;
+            height: 100%;
+            padding: 15px;
             box-sizing: border-box;
-        }
-        .terminal {
-            padding: 15px !important;
         }
     </style>
 </head>
 <body>
 
-    <script type="py" id="runner" terminal worker>
-import sys
-import asyncio
-from pyodide.http import pyfetch
-import time
-import js
+<div id="terminal"></div>
 
-async def boot_system():
-    print("\x1b[1;32m[SYSTEM]\x1b[0m Booting terminal console engine...")
-    print("\x1b[1;32m[SYSTEM]\x1b[0m Pulling main.py from repository directory...\n")
-    
-    try:
-        # Read the custom data-url attribute we set using JavaScript below
-        script_element = js.document.getElementById("runner")
-        base_dir = script_element.getAttribute("data-url")
-        
-        timestamp = int(time.time())
-        target_url = f"{base_dir}/main.py?t={timestamp}"
-        
-        # Fetch directly using the perfect string
-        response = await pyfetch(target_url)
-        
-        if response.status != 200:
-            print(f"\x1b[1;31m[ERROR] Could not load main.py (Status: {response.status})\x1b[0m")
-            return
-            
-        # Write bytes safely to internal storage
-        with open("main.py", "wb") as f:
-            f.write(await response.bytes())
-            
-        # Execute the python script
-        with open("main.py", "r") as f:
-            exec(f.read(), globals())
-            
-    except Exception as e:
-        print(f"\n\x1b[1;31m[CRITICAL ERROR] Execution failed: {str(e)}\x1b[0m")
+<script>
+    let term;
+    let pyodide;
+    let currentLineData = "";
+    let inputPromiseResolver = null;
 
-# Execute the background loop
-asyncio.ensure_future(boot_system())
-    </script>
+    // 1. Instantly draw the Terminal window on screen so it is never blank
+    function createTerminalShell() {
+        term = new Terminal({
+            cursorBlink: true,
+            fontSize: 16,
+            fontFamily: '"Courier New", Courier, monospace',
+            theme: { background: '#000000', foreground: '#ffffff', cursor: '#ffffff' },
+            convertEol: true
+        });
+        term.open(document.getElementById('terminal'));
+        term.writeln("\x1b[1;32m[SYSTEM]\x1b[0m Booting terminal console engine...");
+    }
 
-    <script>
-        // Main thread JavaScript figures out the clean path safely
-        const currentHref = window.location.href;
-        const cleanPath = currentHref.substring(0, currentHref.lastIndexOf('/'));
-        
-        // Inject the clean path straight into the PyScript tag attributes
-        document.getElementById("runner").setAttribute("data-url", cleanPath);
-    </script>
+    // 2. Main execution architecture loop
+    async function bootSystem() {
+        createTerminalShell();
+
+        try {
+            // Load the core Pyodide environment safely
+            pyodide = await loadPyodide();
+            term.writeln("\x1b[1;32m[SYSTEM]\x1b[0m Core engine successfully configured.");
+
+            // Calculate the absolute path safely right here on the main JavaScript thread
+            const currentHref = window.location.href;
+            const baseDirectory = currentHref.substring(0, currentHref.lastIndexOf('/'));
+            const cacheBuster = new Date().getTime();
+            const absoluteTargetUrl = `${baseDirectory}/main.py?t=${cacheBuster}`;
+
+            term.writeln("\x1b[1;32m[SYSTEM]\x1b[0m Pulling main.py from repository directory...");
+
+            // Fetch the code
+            const response = await fetch(absoluteTargetUrl);
+            if (!response.ok) throw new Error(`Could not access main.py (Status: ${response.status})`);
+            const pythonCode = await response.text();
+
+            term.writeln("\x1b[1;32m[SYSTEM]\x1b[0m main.py downloaded. Running runtime environment...\r\n");
+
+            // Capture standard print outputs directly to Xterm lines
+            pyodide.setStdout({
+                write: (buffer) => {
+                    term.write(String.fromCharCode.apply(null, buffer));
+                }
+            });
+            pyodide.setStderr({
+                write: (buffer) => {
+                    term.write(`\x1b[1;31m${String.fromCharCode.apply(null, buffer)}\x1b[0m`);
+                }
+            });
+
+            // Map Python's native input() calls directly to our keyboard tracking systems
+            pyodide.setStdin({
+                stdin: () => {
+                    return new Promise((resolve) => {
+                        inputPromiseResolver = resolve; // Pause python until user presses Enter
+                    });
+                }
+            });
+
+            // Handle typing key inputs inside the active line context
+            term.onData(data => {
+                if (inputPromiseResolver) {
+                    if (data === '\r') { // Enter key pressed
+                        term.write('\r\n');
+                        const submittedData = currentLineData;
+                        currentLineData = "";
+                        const resolve = inputPromiseResolver;
+                        inputPromiseResolver = null;
+                        resolve(submittedData); // Hand line data over to Python's input() check
+                    } 
+                    else if (data === '\x7F') { // Backspace key pressed
+                        if (currentLineData.length > 0) {
+                            currentLineData = currentLineData.slice(0, -1);
+                            term.write('\b \b');
+                        }
+                    } 
+                    else if (data.charCodeAt(0) >= 32 && data.charCodeAt(0) < 127) { // Standard characters
+                        currentLineData += data;
+                        term.write(data);
+                    }
+                }
+            });
+
+            // Execute the code asynchronously using a non-blocking timeout strategy
+            setTimeout(async () => {
+                try {
+                    await pyodide.runPythonAsync(pythonCode);
+                    term.writeln("\r\n\x1b[1;34m[PROCESS COMPLETED]\x1b[0m");
+                } catch (runErr) {
+                    term.writeln(`\r\n\x1b[1;31m[RUNTIME ERROR]\x1b[0m\r\n${runErr.message}`);
+                }
+            }, 100);
+
+        } catch (setupErr) {
+            term.writeln(`\r\n\x1b[1;31m[FATAL ERROR] Initialization failure: ${setupErr.message}\x1b[0m`);
+        }
+    }
+
+    bootSystem();
+</script>
 
 </body>
 </html>
