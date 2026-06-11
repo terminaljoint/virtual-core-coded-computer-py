@@ -1,13 +1,13 @@
 
-# ***CLICK THIS TO USE THE VIRTUAL COMPUTER***
+# ***CLICK THIS TO USE THE VIRTUAL CORE CODED COMPUTER***
 https://terminaljoint.github.io/virtual-core-coded-computer-py/
 
 ***
 
-# ***FOLLOW THESE STEPS TO RUN THIS VIRTUAL COMPUTER ON YOUR DEVICE TERMINAL:***
+# ***FOLLOW THESE STEPS TO RUN THIS VIRTUAL CORE CODED COMPUTER ON YOUR DEVICE TERMINAL:***
 
 ## 1. Clone the GitHub repository:
-`git clone https://github.com/terminaljoint/virtual-computer-using-py.git`
+`git clone https://terminaljoint.github.io/virtual-core-coded-computer-py.git`
 
 ## 2. Enter the project directory:
 `cd virtual-computer-using-py`
