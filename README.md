@@ -1,6 +1,6 @@
 
 # ***CLICK THIS TO USE THE VIRTUAL COMPUTER***
-https://terminaljoint.github.io/virtual-computer-using-py/
+https://terminaljoint.github.io/virtual-core-coded-computer-py/
 
 ***
 
